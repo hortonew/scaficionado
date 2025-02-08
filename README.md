@@ -1,5 +1,7 @@
 # Scaficionado
 
+Pronunciation: sk[a·fi·ci·o·na·do](https://www.oxfordlearnersdictionaries.com/us/definition/english/aficionado), or scaffold + aficionado.
+
 A scaffolding tool to create repeatable project structure using files and scripts from local or remote repositories.
 
 - Files ending in .tera will get templated using [tera](https://keats.github.io/tera/), otherwise they'll just get copied.
@@ -31,6 +33,10 @@ scaficionado -h
 #   -h, --help                         Print help
 #   -V, --version                      Print version
 
+# accept defaults
+scaficionado
+
+# with flags for output and project name
 scaficionado -o output_scaffolding -p MyTestProjectName
 ```
 
@@ -87,3 +93,7 @@ See [example scaffolding](examples/scaffolding.toml) using this project.
 cargo build --release
 cargo install --path .
 ```
+
+## Release
+
+To release a new version to Crates.io, tag a new version as vX.Y.Z, matching the version in Cargo.toml.
