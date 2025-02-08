@@ -1,0 +1,10 @@
+[package]
+name = "scaffolding"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+git2 = "0.20.0"
+serde = { version = "1.0.217", features = ["derive"] }
+tera = "1.20.0"
+toml = "0.8.20"
