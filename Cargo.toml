@@ -1,10 +1,13 @@
 [package]
-name = "scaffolding"
+name = "scaficionado"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-git2 = "0.20.0"
-serde = { version = "1.0.217", features = ["derive"] }
-tera = "1.20.0"
-toml = "0.8.20"
+clap = { version = "4", features = ["derive"] }
+clap_derive = "4"
+git2 = "0.20"
+serde = { version = "1", features = ["derive"] }
+tempfile = "3.16.0"
+tera = "1.20"
+toml = "0.8"
