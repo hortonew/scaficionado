@@ -66,6 +66,11 @@ files = [
 pre = "hooks/pre.sh"
 # optional post hook found in the remote repository
 post = "hooks/post.sh"
+
+# Optionally specify key/values to get injected into the context
+[scaffolds.variables]
+some_count = 2
+some_environment = "development"
 ```
 
 ## Expanded variables

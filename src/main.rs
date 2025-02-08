@@ -1,6 +1,7 @@
 use clap::Parser;
 use git2::Repository;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 use std::io;
@@ -96,6 +97,7 @@ struct Scaffold {
     template_dir: Option<String>,
     template: TemplateConfig,
     hooks: Option<HooksConfig>,
+    variables: Option<HashMap<String, toml::Value>>,
 }
 
 #[derive(Deserialize)]
@@ -205,11 +207,20 @@ fn process_scaffold(scaffold: &Scaffold, project_name: &str, output_base: &Path)
     // --- Determine the Templates Directory ---
     // Use the provided template_dir or default to "templates".
     let templates_dir = scaffold_repo_base.join(scaffold.template_dir.as_deref().unwrap_or("templates"));
-    // println!("Rendering templates from: {:?}", templates_dir);
+    println!("Rendering templates from: {:?}", templates_dir);
 
     // --- Set Up the Templating Context ---
     let mut context = Context::new();
     context.insert("project_name", project_name);
+
+    // Merge additional variables from scaffolding.toml (if any)
+    if let Some(vars) = &scaffold.variables {
+        for (key, value) in vars {
+            // Insert each variable into the Tera context.
+            println!("Setting variable: {} = {:?}", key, value);
+            context.insert(key, value);
+        }
+    }
 
     // --- Render Templates / Copy Files ---
     render_templates(&templates_dir, output_base, scaffold, &context)?;
