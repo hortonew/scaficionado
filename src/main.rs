@@ -185,7 +185,10 @@ fn render_templates(templates_dir: &Path, output_base: &Path, scaffold: &Scaffol
 
 /// Process a single scaffold: obtain its repository, render its templates,
 /// and run any pre- or post-generation hooks.
-fn process_scaffold(scaffold: &Scaffold, project_name: &str, output_base: &Path) -> Result<(), Box<dyn Error>> {
+///
+/// Returns an Option<PathBuf> containing the persistent temporary directory
+/// used for a remote clone, if applicable.
+fn process_scaffold(scaffold: &Scaffold, project_name: &str, output_base: &Path) -> Result<Option<PathBuf>, Box<dyn Error>> {
     // --- Obtain the Scaffold Repository ---
     let scaffold_repo_base: PathBuf = if is_local_repo(&scaffold.repo) {
         // For a local repository, canonicalize the path.
@@ -193,7 +196,7 @@ fn process_scaffold(scaffold: &Scaffold, project_name: &str, output_base: &Path)
         println!("Using local scaffold repository at: {:?}", path);
         path
     } else {
-        // For a remote repository, clone it into a temporary directory.
+        // For a remote repository, clone it into a temporary directory and persist it.
         let temp_dir = TempDir::new()?;
         let scaffold_dir = temp_dir.path().join(scaffold.name.as_deref().unwrap_or("unnamed"));
         if scaffold_dir.exists() {
@@ -201,7 +204,10 @@ fn process_scaffold(scaffold: &Scaffold, project_name: &str, output_base: &Path)
         }
         println!("Cloning repo {:?}", scaffold.repo);
         let _repo = obtain_template_repo(&scaffold.repo, &scaffold_dir)?;
-        scaffold_dir
+        // Persist the temporary directory so that the clone isn't deleted.
+        let persistent_temp_dir = temp_dir.into_path();
+        // The actual clone path is inside the persistent_temp_dir.
+        persistent_temp_dir.join(scaffold.name.as_deref().unwrap_or("unnamed"))
     };
 
     // --- Determine the Templates Directory ---
@@ -216,7 +222,6 @@ fn process_scaffold(scaffold: &Scaffold, project_name: &str, output_base: &Path)
     // Merge additional variables from scaffolding.toml (if any)
     if let Some(vars) = &scaffold.variables {
         for (key, value) in vars {
-            // Insert each variable into the Tera context.
             println!("Setting variable: {} = {:?}", key, value);
             context.insert(key, value);
         }
@@ -243,7 +248,13 @@ fn process_scaffold(scaffold: &Scaffold, project_name: &str, output_base: &Path)
         }
     }
 
-    Ok(())
+    // If the repository was remote, return the persistent temporary directory so it can be cleaned up.
+    if is_local_repo(&scaffold.repo) {
+        Ok(None)
+    } else {
+        // The persistent directory is the same as scaffold_repo_base in the remote branch.
+        Ok(Some(scaffold_repo_base))
+    }
 }
 
 // ================================================
@@ -260,6 +271,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Loading configuration from: {:?}", config_path);
     let config = load_config(config_path)?;
 
+    // Vector to hold persistent temporary directories (from remote clones)
+    let mut persistent_dirs: Vec<PathBuf> = Vec::new();
+
     // --- Process Each Scaffold ---
     for scaffold in &config.scaffolds {
         if let Some(name) = &scaffold.name {
@@ -267,9 +281,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         } else {
             println!("Processing unnamed scaffold");
         }
-        process_scaffold(scaffold, &project_name, output_base)?;
+        let maybe_dir = process_scaffold(scaffold, &project_name, output_base)?;
+        if let Some(dir) = maybe_dir {
+            // Save the persistent directory for cleanup later.
+            persistent_dirs.push(dir);
+        }
     }
 
     println!("Scaffolding for project '{}' created successfully!", project_name);
+
+    // --- Clean Up Persistent Temporary Directories ---
+    for dir in persistent_dirs {
+        println!("Cleaning up temporary clone at: {:?}", dir);
+        fs::remove_dir_all(&dir)?;
+    }
+
     Ok(())
 }
