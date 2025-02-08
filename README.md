@@ -13,6 +13,7 @@ A scaffolding tool to create repeatable project structure using files and script
 [![Crates.io][crates-badge]][crates-url]
 [![MIT licensed][mit-badge]][mit-url]
 [![Build Status][actions-badge]][actions-url]
+[![Build Status][docsrs-badge]][docsrs-url]
 
 [crates-badge]: https://img.shields.io/crates/v/scaficionado.svg
 [crates-url]: https://crates.io/crates/scaficionado
@@ -20,6 +21,8 @@ A scaffolding tool to create repeatable project structure using files and script
 [mit-url]: https://github.com/hortonew/scaficionado/blob/main/LICENSE
 [actions-badge]: https://github.com/hortonew/scaficionado/actions/workflows/release.yml/badge.svg
 [actions-url]: https://github.com/hortonew/scaficionado/actions
+[docsrs-badge]: https://docs.rs/scaficionado/badge.svg
+[docsrs-url]: https://docs.rs/scaficionado/latest/scaficionado/
 
 ## Prerequisites
 
