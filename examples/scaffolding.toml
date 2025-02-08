@@ -1,0 +1,21 @@
+[[scaffolds]]
+name = "Local"
+repo = "https://github.com/hortonew/scaficionado"
+template_dir = "examples"
+[scaffolds.template]
+files = [
+    { src = "kind-cluster/kind_config.yaml.tera", dest = "{{project_name}}/terraform/main.tf" },
+    { src = "terraform-eks-cheap/variables.tf.tera", dest = "terraform/variables.tf" },
+    { src = "terraform-eks-cheap/main.tf.tera", dest = "terraform/main.tf" },
+    { src = "terraform-eks-cheap/terraform.tf", dest = "terraform/terraform.tf" },
+    { src = "terraform-eks-cheap/outputs.tf", dest = "terraform/outputs.tf" },
+]
+[scaffolds.hooks]
+pre = "examples/hooks/pre_generate.sh"
+post = "examples/hooks/post_generate.sh"
+
+[scaffolds.variables]
+kind_workers = 3
+environment = "development"
+aws_region = "us-west-2"
+eks_version = "1.31"
