@@ -42,14 +42,19 @@ struct HooksConfig {
 }
 
 #[derive(Deserialize)]
-struct ScaffoldConfig {
+struct Scaffold {
+    name: Option<String>,
     template: TemplateConfig,
     hooks: Option<HooksConfig>,
 }
+#[derive(Deserialize)]
+struct Config {
+    scaffolds: Vec<Scaffold>,
+}
 
-fn load_config(config_path: &Path) -> Result<ScaffoldConfig, Box<dyn std::error::Error>> {
+fn load_config(config_path: &Path) -> Result<Config, Box<dyn std::error::Error>> {
     let config_str = fs::read_to_string(config_path)?;
-    let config: ScaffoldConfig = toml::from_str(&config_str)?;
+    let config: Config = toml::from_str(&config_str)?;
     Ok(config)
 }
 
@@ -62,17 +67,12 @@ fn run_hook(script_path: &Path) -> io::Result<()> {
     }
 }
 
-fn render_templates(
-    templates_dir: &Path,
-    output_base: &Path,
-    config: &ScaffoldConfig,
-    context_data: &Context,
-) -> Result<(), Box<dyn Error>> {
+fn render_templates(templates_dir: &Path, output_base: &Path, scaffold: &Scaffold, context_data: &Context) -> Result<(), Box<dyn Error>> {
     // Build the Tera instance with all files under the templates directory.
     let templates_pattern = format!("{}/**/*", templates_dir.to_str().unwrap());
     let tera = Tera::new(&templates_pattern)?;
 
-    for file in &config.template.files {
+    for file in &scaffold.template.files {
         // If the file.src starts with "templates/", remove that prefix.
         let key = if file.src.starts_with("templates/") {
             &file.src["templates/".len()..]
@@ -102,57 +102,61 @@ fn render_templates(
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    // Define parameters: repository URL, project name, and output directory.
-    // For example, use a local relative path.
+    // Define parameters.
     let repo_url = "../example-1";
     let project_name = "MyLab";
     let output_base = Path::new("./generated");
 
     // Determine the repository base directory.
-    // If the repository is local, canonicalize and use that path.
-    // Otherwise, clone the repository into a temporary directory and use that.
     let repo_base: PathBuf = if is_local_repo(repo_url) {
-        // Convert the relative path to an absolute one.
         let path = fs::canonicalize(repo_url)?;
         println!("Using local repository at: {:?}", path);
         path
     } else {
-        // For remote repositories, clone into a temporary directory.
         let temp_dir = std::env::temp_dir().join("scaffold_repo");
         println!("Cloning remote repository into: {:?}", temp_dir);
         let _repo = obtain_template_repo(repo_url, &temp_dir)?;
         temp_dir
     };
 
-    // Load the scaffold configuration from repo_base.
-    let config_path = repo_base.join("scaffold.toml");
+    // Load the configuration (now containing multiple scaffolds).
+    let config_path = repo_base.join("scaffolding.toml");
     println!("Loading configuration from: {:?}", config_path);
-    let scaffold_config = load_config(&config_path)?;
-
-    // Run the pre-generation hook, if defined.
-    if let Some(hooks) = &scaffold_config.hooks {
-        if let Some(pre_script) = &hooks.pre {
-            let pre_hook_path = repo_base.join(pre_script);
-            println!("Running pre-generation hook: {:?}", pre_hook_path);
-            run_hook(&pre_hook_path)?;
-        }
-    }
+    let config = load_config(&config_path)?;
 
     // Set up the templating context.
     let mut context = Context::new();
     context.insert("project_name", project_name);
 
-    // Render templates to the desired output directory.
-    let templates_dir = repo_base.join("templates");
-    println!("Rendering templates from: {:?}", templates_dir);
-    render_templates(&templates_dir, output_base, &scaffold_config, &context)?;
+    // Iterate over each scaffold.
+    for scaffold in config.scaffolds {
+        if let Some(name) = scaffold.name.as_deref() {
+            println!("Processing scaffold: {}", name);
+        } else {
+            println!("Processing unnamed scaffold");
+        }
 
-    // Run the post-generation hook, if defined.
-    if let Some(hooks) = &scaffold_config.hooks {
-        if let Some(post_script) = &hooks.post {
-            let post_hook_path = repo_base.join(post_script);
-            println!("Running post-generation hook: {:?}", post_hook_path);
-            run_hook(&post_hook_path)?;
+        // Process pre-generation hook, if defined.
+        if let Some(hooks) = &scaffold.hooks {
+            if let Some(pre_script) = &hooks.pre {
+                let pre_hook_path = repo_base.join(pre_script);
+                println!("Running pre-generation hook: {:?}", pre_hook_path);
+                run_hook(&pre_hook_path)?;
+            }
+        }
+
+        // Render the templates for this scaffold.
+        let templates_dir = repo_base.join("templates");
+        println!("Rendering templates from: {:?}", templates_dir);
+        render_templates(&templates_dir, output_base, &scaffold, &context)?;
+
+        // Process post-generation hook, if defined.
+        if let Some(hooks) = &scaffold.hooks {
+            if let Some(post_script) = &hooks.post {
+                let post_hook_path = repo_base.join(post_script);
+                println!("Running post-generation hook: {:?}", post_hook_path);
+                run_hook(&post_hook_path)?;
+            }
         }
     }
 
