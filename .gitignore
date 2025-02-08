@@ -1,3 +1,4 @@
 /target
 generated*
 .vscode
+scaffolding.toml
