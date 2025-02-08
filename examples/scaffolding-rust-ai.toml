@@ -1,0 +1,13 @@
+[[scaffolds]]
+name = "Rust AI Project"
+repo = "https://github.com/hortonew/scaficionado"
+template_dir = "examples"
+[scaffolds.template]
+files = [
+    { src = "rust-openai/env.tera", dest = "rust_openai/.env" },
+    { src = "rust-openai/rustfmt.toml", dest = "rust_openai/rustfmt.toml" },
+    { src = "rust-openai/Cargo.toml", dest = "rust_openai/Cargo.toml" },
+    { src = "rust-openai/src/main.rs", dest = "rust_openai/src/main.rs" },
+]
+[scaffolds.variables]
+OPENAI_API_KEY = "a_key_you_can_change_later"

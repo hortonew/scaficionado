@@ -103,7 +103,8 @@ some_environment = "development"
 
 ## Example configuration
 
-See [example scaffolding](examples/scaffolding.toml) using this project.
+- [example scaffolding for Kubernetes](examples/scaffolding.toml)
+- [example scaffolding for Rust AI app](examples/scaffolding-rust-ai.toml)
 
 ## Build from source
 
