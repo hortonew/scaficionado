@@ -10,12 +10,18 @@ A scaffolding tool to create repeatable project structure using files and script
 
 - A scaffolding.toml file (can be renamed if using -c argument).  See Configuration Details below.
 
+## Install
+
+[Package from crates.io](https://crates.io/crates/scaficionado)
+
+```sh
+cargo install scaficionado
+```
+
 ## Usage
 
 ```sh
 # create scaffolding.toml
-
-cargo install scaficionado
 
 scaficionado -h
 # Usage: scaficionado [OPTIONS]
@@ -29,6 +35,8 @@ scaficionado -h
 
 scaficionado -o output_scaffolding -p MyTestProjectName
 ```
+
+![Scaficionado](/images/scaficionado.gif)
 
 ## Configuration Details
 
