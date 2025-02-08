@@ -8,13 +8,24 @@ A scaffolding tool to create repeatable project structure using files and script
 - Files will get generated into a directory called "generated" in the root of where it's called.
 - Hooks (shell scripts) can be called before and after each scaffold
 
+## Status
+
+[![Crates.io][crates-badge]][crates-url]
+[![MIT licensed][mit-badge]][mit-url]
+[![Build Status][actions-badge]][actions-url]
+
+[crates-badge]: https://img.shields.io/crates/v/scaficionado.svg
+[crates-url]: https://crates.io/crates/scaficionado
+[mit-badge]: https://img.shields.io/badge/license-MIT-blue.svg
+[mit-url]: https://github.com/hortonew/scaficionado/blob/main/LICENSE
+[actions-badge]: https://github.com/hortonew/scaficionado/actions/workflows/release.yml/badge.svg
+[actions-url]: https://github.com/hortonew/scaficionado/actions
+
 ## Prerequisites
 
 - A scaffolding.toml file (can be renamed if using -c argument).  See Configuration Details below.
 
 ## Install
-
-[Package from crates.io](https://crates.io/crates/scaficionado)
 
 ```sh
 cargo install scaficionado
