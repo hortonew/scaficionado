@@ -3,8 +3,8 @@
 A scaffolding tool to create repeatable project structure using files and scripts from local or remote repositories.
 
 - Files ending in .tera will get templated using [tera](https://crates.io/crates/tera), otherwise they'll just get copied.
-
 - Files will get generated into a directory called "generated" in the root of where it's called.
+- Hooks (shell scripts) can be called before and after each scaffold
 
 ## Prerequisites
 
