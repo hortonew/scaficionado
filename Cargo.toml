@@ -1,6 +1,6 @@
 [package]
 name = "scaficionado"                                                                                                                # This must be unique on crates.io
-version = "0.2.3"
+version = "0.3.0"
 edition = "2021"
 description = "A scaffolding tool to create repeatable project structure using files and scripts from local or remote repositories."
 license = "MIT"
@@ -16,3 +16,11 @@ serde = { version = "1", features = ["derive"] }
 tempfile = "3.16.0"
 tera = "1.20"
 toml = "0.8"
+
+[lib]
+name = "scaficionado"
+path = "src/lib.rs"
+
+[[bin]]
+name = "scaficionado"
+path = "src/main.rs"
