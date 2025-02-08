@@ -21,15 +21,13 @@ cargo install scaficionado
 ## Usage
 
 ```sh
-# create scaffolding.toml
-
 scaficionado -h
 # Usage: scaficionado [OPTIONS]
 
 # Options:
 #   -p, --project-name <PROJECT_NAME>  The name of the project to scaffold [default: MyExampleProject]
 #   -o, --output <OUTPUT>              The output directory where the generated files will be placed [default: generated]
-#   -c, --config <CONFIG>              The configuration file path (default: scaffolding.toml) [default: scaffolding.toml]
+#   -c, --config <CONFIG>              The configuration file path [default: scaffolding.toml]
 #   -h, --help                         Print help
 #   -V, --version                      Print version
 

@@ -24,7 +24,7 @@ struct Args {
     #[arg(short, long, default_value = "generated")]
     output: String,
 
-    /// The configuration file path (default: scaffolding.toml).
+    /// The configuration file path.
     #[arg(short, long, default_value = "scaffolding.toml")]
     config: String,
 }
