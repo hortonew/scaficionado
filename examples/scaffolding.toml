@@ -1,10 +1,10 @@
 [[scaffolds]]
-name = "Local"
+name = "Local/EKS Kubernetes Project"
 repo = "https://github.com/hortonew/scaficionado"
 template_dir = "examples"
 [scaffolds.template]
 files = [
-    { src = "kind-cluster/kind_config.yaml.tera", dest = "{{project_name}}/terraform/main.tf" },
+    { src = "kind-cluster/kind_config.yaml.tera", dest = "kind_config.yaml" },
     { src = "terraform-eks-cheap/variables.tf.tera", dest = "terraform/variables.tf" },
     { src = "terraform-eks-cheap/main.tf.tera", dest = "terraform/main.tf" },
     { src = "terraform-eks-cheap/terraform.tf", dest = "terraform/terraform.tf" },
