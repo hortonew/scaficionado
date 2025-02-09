@@ -10,6 +10,43 @@ use std::process::Command;
 use tempfile::TempDir;
 use tera::{Context, Tera};
 
+// Defaults
+const DEFAULT_CONFIG_PATH: &str = "scaffolding.toml";
+const DEFAULT_PROJECT_NAME: &str = "MyExampleProject";
+const DEFAULT_OUTPUT: &str = "generated";
+
+// ================================================
+// ========== MAIN FUNCTION =======================
+// ================================================
+
+pub fn run() -> Result<(), Box<dyn Error>> {
+    let args = Args::parse();
+    let config_path = Path::new(&args.config);
+    println!("Loading configuration from: {:?}", config_path);
+    let mut config = load_config(config_path)?;
+    println!("The configuration project_name and output are: {:?}", config.project);
+
+    overwrite_project_settings_with_args(&args, &mut config);
+
+    let project_name = get_project_name(&args, &config);
+    let output = get_output_directory(&args, &config);
+    let output_base = Path::new(&output);
+    println!("Scaffolding project '{}' to: {:?}", project_name, output_base);
+
+    let mut persistent_dirs: Vec<PathBuf> = Vec::new();
+    for scaffold in &config.scaffolds {
+        println!("Processing scaffold: {}", scaffold.name.as_deref().unwrap_or("unnamed"));
+        if let Some(dir) = process_scaffold(scaffold, &project_name, output_base)? {
+            persistent_dirs.push(dir);
+        }
+    }
+
+    println!("Scaffolding for project '{}' created successfully!", project_name);
+    clean_up_persistent_dirs(persistent_dirs)?;
+
+    Ok(())
+}
+
 // ================================================
 // ========== COMMAND LINE ARGUMENTS ==============
 // ================================================
@@ -17,16 +54,16 @@ use tera::{Context, Tera};
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// The name of the project to scaffold.
-    #[arg(short, long, default_value = "MyExampleProject")]
+    /// The name of the project to scaffold.  Overwrites project_name set in configuration file.
+    #[arg(short, long, default_value = DEFAULT_PROJECT_NAME)]
     project_name: String,
 
-    /// The output directory where the generated files will be placed.
-    #[arg(short, long, default_value = "generated")]
+    /// The output directory where the generated files will be placed.  Overwrites output set in configuration file.
+    #[arg(short, long, default_value = DEFAULT_OUTPUT)]
     output: String,
 
     /// The configuration file path.
-    #[arg(short, long, default_value = "scaffolding.toml")]
+    #[arg(short, long, default_value = DEFAULT_CONFIG_PATH)]
     config: String,
 }
 
@@ -61,6 +98,58 @@ fn run_hook(script_path: &Path) -> io::Result<()> {
     } else {
         Ok(())
     }
+}
+
+/// Overwrite the project settings in the configuration with the values from the command line arguments
+/// only if they differ from the defaults.
+fn overwrite_project_settings_with_args(args: &Args, config: &mut Config) {
+    if args.project_name != DEFAULT_PROJECT_NAME {
+        if let Some(ref mut project) = config.project {
+            project.name = Some(args.project_name.clone());
+        } else {
+            config.project = Some(ProjectConfig {
+                name: Some(args.project_name.clone()),
+                output: None,
+            });
+        }
+    }
+    if args.output != DEFAULT_OUTPUT {
+        if let Some(ref mut project) = config.project {
+            project.output = Some(args.output.clone());
+        } else {
+            config.project = Some(ProjectConfig {
+                name: None,
+                output: Some(args.output.clone()),
+            });
+        }
+    }
+}
+
+/// Get the project name: use the config value if present; otherwise fall back to the CLI default.
+fn get_project_name(args: &Args, config: &Config) -> String {
+    config
+        .project
+        .as_ref()
+        .and_then(|proj| proj.name.clone())
+        .unwrap_or_else(|| args.project_name.clone())
+}
+
+/// Get the output directory: use the config value if present; otherwise fall back to the CLI default.
+fn get_output_directory(args: &Args, config: &Config) -> String {
+    config
+        .project
+        .as_ref()
+        .and_then(|proj| proj.output.clone())
+        .unwrap_or_else(|| args.output.clone())
+}
+
+/// Clean up the persistent temporary directories used for remote clones.
+fn clean_up_persistent_dirs(dirs: Vec<PathBuf>) -> Result<(), Box<dyn Error>> {
+    for dir in dirs {
+        println!("Cleaning up temporary clone at: {:?}", dir);
+        fs::remove_dir_all(&dir)?;
+    }
+    Ok(())
 }
 
 // ================================================
@@ -100,8 +189,16 @@ struct Scaffold {
     variables: Option<HashMap<String, toml::Value>>,
 }
 
+// Add a new struct for top-level project configuration.
+#[derive(Deserialize, Debug)]
+struct ProjectConfig {
+    name: Option<String>,
+    output: Option<String>,
+}
+
 #[derive(Deserialize)]
 struct Config {
+    project: Option<ProjectConfig>,
     scaffolds: Vec<Scaffold>,
 }
 
@@ -252,48 +349,6 @@ fn process_scaffold(scaffold: &Scaffold, project_name: &str, output_base: &Path)
         // The persistent directory is the same as scaffold_repo_base in the remote branch.
         Ok(Some(scaffold_repo_base))
     }
-}
-
-// ================================================
-// ========== MAIN FUNCTION =======================
-// ================================================
-
-pub fn run() -> Result<(), Box<dyn Error>> {
-    let args = Args::parse();
-    let project_name = args.project_name;
-    let output_base = Path::new(&args.output);
-    let config_path = Path::new(&args.config);
-
-    // --- Load the Client-Side Configuration ---
-    println!("Loading configuration from: {:?}", config_path);
-    let config = load_config(config_path)?;
-
-    // Vector to hold persistent temporary directories (from remote clones)
-    let mut persistent_dirs: Vec<PathBuf> = Vec::new();
-
-    // --- Process Each Scaffold ---
-    for scaffold in &config.scaffolds {
-        if let Some(name) = &scaffold.name {
-            println!("Processing scaffold: {}", name);
-        } else {
-            println!("Processing unnamed scaffold");
-        }
-        let maybe_dir = process_scaffold(scaffold, &project_name, output_base)?;
-        if let Some(dir) = maybe_dir {
-            // Save the persistent directory for cleanup later.
-            persistent_dirs.push(dir);
-        }
-    }
-
-    println!("Scaffolding for project '{}' created successfully!", project_name);
-
-    // --- Clean Up Persistent Temporary Directories ---
-    for dir in persistent_dirs {
-        println!("Cleaning up temporary clone at: {:?}", dir);
-        fs::remove_dir_all(&dir)?;
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]
@@ -539,6 +594,92 @@ environment = "development"
             .contains("MyProject-development-kind_config3.yaml"));
         let output_content = fs::read_to_string(expected_output_file)?;
         assert!(output_content.contains("config: MyProject, workers: 3, env: development"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_overwrite_project_settings_with_args() -> Result<(), Box<dyn std::error::Error>> {
+        // Test when config.project is None.
+        let args = Args {
+            project_name: "ArgProject".into(),
+            output: "arg_output".into(),
+            config: "dummy".into(),
+        };
+        let mut config = Config {
+            project: None,
+            scaffolds: vec![],
+        };
+        overwrite_project_settings_with_args(&args, &mut config);
+        let proj = config.project.unwrap();
+        assert_eq!(proj.name.unwrap(), "ArgProject");
+        assert_eq!(proj.output.unwrap(), "arg_output");
+
+        // Test when config.project already exists.
+        let mut config = Config {
+            project: Some(ProjectConfig {
+                name: Some("OldProject".into()),
+                output: Some("old_output".into()),
+            }),
+            scaffolds: vec![],
+        };
+        // Overwrite with new values.
+        let args = Args {
+            project_name: "NewProject".into(),
+            output: "new_output".into(),
+            config: "dummy".into(),
+        };
+        overwrite_project_settings_with_args(&args, &mut config);
+        let proj = config.project.unwrap();
+        assert_eq!(proj.name.unwrap(), "NewProject");
+        assert_eq!(proj.output.unwrap(), "new_output");
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_project_name_and_get_output_directory() -> Result<(), Box<dyn std::error::Error>> {
+        // When project config exists.
+        let args = Args {
+            project_name: "CLIProject".into(),
+            output: "CLOutput".into(),
+            config: "dummy".into(),
+        };
+        let config = Config {
+            project: Some(ProjectConfig {
+                name: Some("ConfigProject".into()),
+                output: Some("ConfigOutput".into()),
+            }),
+            scaffolds: vec![],
+        };
+        assert_eq!(get_project_name(&args, &config), "ConfigProject");
+        assert_eq!(get_output_directory(&args, &config), "ConfigOutput");
+
+        // When project config is missing.
+        let config = Config {
+            project: None,
+            scaffolds: vec![],
+        };
+        assert_eq!(get_project_name(&args, &config), "CLIProject");
+        assert_eq!(get_output_directory(&args, &config), "CLOutput");
+        Ok(())
+    }
+
+    #[test]
+    fn test_clean_up_persistent_dirs() -> Result<(), Box<dyn std::error::Error>> {
+        // Create two temporary directories and then call clean_up_persistent_dirs.
+        let temp_dir1 = tempfile::TempDir::new()?;
+        let temp_path1 = temp_dir1.into_path();
+        let temp_dir2 = tempfile::TempDir::new()?;
+        let temp_path2 = temp_dir2.into_path();
+
+        // Ensure directories exist before cleanup.
+        assert!(temp_path1.exists());
+        assert!(temp_path2.exists());
+
+        clean_up_persistent_dirs(vec![temp_path1.clone(), temp_path2.clone()])?;
+
+        // Verify directories are removed.
+        assert!(!temp_path1.exists());
+        assert!(!temp_path2.exists());
         Ok(())
     }
 }

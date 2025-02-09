@@ -45,8 +45,8 @@ scaficionado -h
 # Usage: scaficionado [OPTIONS]
 
 # Options:
-#   -p, --project-name <PROJECT_NAME>  The name of the project to scaffold [default: MyExampleProject]
-#   -o, --output <OUTPUT>              The output directory where the generated files will be placed [default: generated]
+#   -p, --project-name <PROJECT_NAME>  The name of the project to scaffold.  Overwrites project_name set in configuration file [default: MyExampleProject]
+#   -o, --output <OUTPUT>              The output directory where the generated files will be placed.  Overwrites output set in configuration file [default: generated]
 #   -c, --config <CONFIG>              The configuration file path [default: scaffolding.toml]
 #   -h, --help                         Print help
 #   -V, --version                      Print version
@@ -54,8 +54,8 @@ scaficionado -h
 # accept defaults
 scaficionado
 
-# with flags for output and project name
-scaficionado -o output_scaffolding -p MyTestProjectName
+# with flags for project name and output
+scaficionado -p MyTestProjectName -o output_scaffolding 
 ```
 
 ![Scaficionado](/images/scaficionado.gif)
@@ -63,7 +63,18 @@ scaficionado -o output_scaffolding -p MyTestProjectName
 ## Configuration Details
 
 ```toml
- # Array of scaffolds
+# (optional) project section, defining name and output location which can alternatively be specified as command-line arguments.
+[project]
+
+# Overwrites the default project_name.  Overwritten by the project-name command-line argument.
+name = "MyExampleProject"
+
+# Overwrites the default output directory.  Overwritten by the output command-line argument.
+# Warning: will overwrite files in your current working directory if you use "."
+# e.g. "output" or "." for current directory
+output = "generated"
+
+# Array of scaffolds
 # Each [[scaffolds]] entry defines a separate scaffold. The generator processes each scaffold in order.
 [[scaffolds]]
 
