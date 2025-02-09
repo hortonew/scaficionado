@@ -299,6 +299,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use std::fs;
     use tempfile::TempDir;
     use tera::Context;
@@ -484,6 +485,60 @@ environment = "development"
         // run_hook should return an error.
         let result = run_hook(&script_path);
         assert!(result.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_dest_file_expands_variables_from_scaffold_variables() -> Result<(), Box<dyn std::error::Error>> {
+        // Create a temporary directory to simulate a local repository.
+        let local_repo_dir = TempDir::new()?;
+        let templates_dir = local_repo_dir.path().join("templates");
+        fs::create_dir_all(&templates_dir)?;
+
+        // Create necessary sub-directory and template file.
+        let kind_cluster_dir = templates_dir.join("kind-cluster");
+        fs::create_dir_all(&kind_cluster_dir)?;
+        let template_file_path = kind_cluster_dir.join("kind_config.yaml.tera");
+        fs::write(
+            &template_file_path,
+            "config: {{project_name}}, workers: {{kind_workers}}, env: {{environment}}",
+        )?;
+
+        // Build a Scaffold instance referring to the local repository.
+        let scaffold = Scaffold {
+            name: Some("LocalTest".to_string()),
+            repo: local_repo_dir.path().to_string_lossy().to_string(),
+            template_dir: Some("templates".to_string()),
+            template: TemplateConfig {
+                files: vec![TemplateFile {
+                    src: "kind-cluster/kind_config.yaml.tera".to_string(),
+                    dest: "{{project_name}}-{{environment}}-kind_config{{kind_workers}}.yaml".to_string(),
+                }],
+            },
+            hooks: None,
+            variables: Some({
+                let mut map = HashMap::new();
+                map.insert("kind_workers".to_string(), toml::Value::Integer(3));
+                map.insert("environment".to_string(), toml::Value::String("development".to_string()));
+                map
+            }),
+        };
+
+        // Create a temporary output directory.
+        let output_dir = TempDir::new()?;
+        process_scaffold(&scaffold, "MyProject", output_dir.path())?;
+
+        // Verify that the destination filename has expanded variables.
+        let expected_output_file = output_dir.path().join("MyProject-development-kind_config3.yaml");
+        assert!(expected_output_file.exists());
+        assert!(expected_output_file
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("MyProject-development-kind_config3.yaml"));
+        let output_content = fs::read_to_string(expected_output_file)?;
+        assert!(output_content.contains("config: MyProject, workers: 3, env: development"));
         Ok(())
     }
 }
