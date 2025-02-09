@@ -48,6 +48,7 @@ scaficionado -h
 #   -p, --project-name <PROJECT_NAME>  The name of the project to scaffold.  Overwrites project_name set in configuration file [default: MyExampleProject]
 #   -o, --output <OUTPUT>              The output directory where the generated files will be placed.  Overwrites output set in configuration file [default: generated]
 #   -c, --config <CONFIG>              The configuration file path [default: scaffolding.toml]
+#   -w, --overwrite                    Overwrite existing files if set. [default: false].  Overwrites overwrite=false set in configuration file
 #   -h, --help                         Print help
 #   -V, --version                      Print version
 
@@ -55,7 +56,10 @@ scaficionado -h
 scaficionado
 
 # with flags for project name and output
-scaficionado -p MyTestProjectName -o output_scaffolding 
+scaficionado -p MyTestProjectName -o output_scaffolding
+
+# force overwrite existing files in current working directory
+scaficionado -p MyTestProjectName -o . -w
 ```
 
 ![Scaficionado](/images/scaficionado.gif)
@@ -63,16 +67,19 @@ scaficionado -p MyTestProjectName -o output_scaffolding
 ## Configuration Details
 
 ```toml
-# (optional) project section, defining name and output location which can alternatively be specified as command-line arguments.
+# (optional) project section, defining name, output location, overwrite which can alternatively be specified as command-line arguments.
 [project]
 
-# Overwrites the default project_name.  Overwritten by the project-name command-line argument.
+# (optional) project name.  Overwrites the default project_name.  Overwritten by the project-name command-line argument.
 name = "MyExampleProject"
 
 # Overwrites the default output directory.  Overwritten by the output command-line argument.
 # Warning: will overwrite files in your current working directory if you use "."
 # e.g. "output" or "." for current directory
 output = "generated"
+
+# (optional) Controls whether or not existing files are overwritten.  Defaults to false.
+overwrite = false
 
 # Array of scaffolds
 # Each [[scaffolds]] entry defines a separate scaffold. The generator processes each scaffold in order.

@@ -14,6 +14,7 @@ use tera::{Context, Tera};
 const DEFAULT_CONFIG_PATH: &str = "scaffolding.toml";
 const DEFAULT_PROJECT_NAME: &str = "MyExampleProject";
 const DEFAULT_OUTPUT: &str = "generated";
+const DEFAULT_OVERWRITE: bool = false;
 
 // ================================================
 // ========== MAIN FUNCTION =======================
@@ -31,12 +32,16 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     let project_name = get_project_name(&args, &config);
     let output = get_output_directory(&args, &config);
     let output_base = Path::new(&output);
-    println!("Scaffolding project '{}' to: {:?}", project_name, output_base);
+    let overwrite = get_overwrite(&args, &config);
+    println!(
+        "Scaffolding project '{}' to: {:?}, overwrite={}",
+        project_name, output_base, overwrite
+    );
 
     let mut persistent_dirs: Vec<PathBuf> = Vec::new();
     for scaffold in &config.scaffolds {
         println!("Processing scaffold: {}", scaffold.name.as_deref().unwrap_or("unnamed"));
-        if let Some(dir) = process_scaffold(scaffold, &project_name, output_base)? {
+        if let Some(dir) = process_scaffold(scaffold, &project_name, output_base, overwrite)? {
             persistent_dirs.push(dir);
         }
     }
@@ -59,12 +64,16 @@ struct Args {
     project_name: String,
 
     /// The output directory where the generated files will be placed.  Overwrites output set in configuration file.
-    #[arg(short, long, default_value = DEFAULT_OUTPUT)]
+    #[arg(short = 'o', long, default_value = DEFAULT_OUTPUT)]
     output: String,
 
     /// The configuration file path.
     #[arg(short, long, default_value = DEFAULT_CONFIG_PATH)]
     config: String,
+
+    /// Overwrite existing files if set. [default: false].  Overwrites overwrite=false set in configuration file.
+    #[arg(short = 'w', long, default_value_t = DEFAULT_OVERWRITE)]
+    overwrite: bool,
 }
 
 // ================================================
@@ -110,6 +119,7 @@ fn overwrite_project_settings_with_args(args: &Args, config: &mut Config) {
             config.project = Some(ProjectConfig {
                 name: Some(args.project_name.clone()),
                 output: None,
+                overwrite: None,
             });
         }
     }
@@ -120,6 +130,18 @@ fn overwrite_project_settings_with_args(args: &Args, config: &mut Config) {
             config.project = Some(ProjectConfig {
                 name: None,
                 output: Some(args.output.clone()),
+                overwrite: None,
+            });
+        }
+    }
+    if args.overwrite != DEFAULT_OVERWRITE {
+        if let Some(ref mut project) = config.project {
+            project.overwrite = Some(args.overwrite);
+        } else {
+            config.project = Some(ProjectConfig {
+                name: None,
+                output: None,
+                overwrite: Some(args.overwrite),
             });
         }
     }
@@ -141,6 +163,11 @@ fn get_output_directory(args: &Args, config: &Config) -> String {
         .as_ref()
         .and_then(|proj| proj.output.clone())
         .unwrap_or_else(|| args.output.clone())
+}
+
+/// Get the overwrite flag: use the config value if present; otherwise fall back to the CLI default.
+fn get_overwrite(args: &Args, config: &Config) -> bool {
+    config.project.as_ref().and_then(|proj| proj.overwrite).unwrap_or(args.overwrite)
 }
 
 /// Clean up the persistent temporary directories used for remote clones.
@@ -194,6 +221,7 @@ struct Scaffold {
 struct ProjectConfig {
     name: Option<String>,
     output: Option<String>,
+    overwrite: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -213,31 +241,27 @@ fn load_config(config_path: &Path) -> Result<Config, Box<dyn Error>> {
 // ========== TEMPLATE RENDERING ==================
 // ================================================
 
-/// Render the templates (or copy files) for a given scaffold.
-///
-/// For files whose `src` ends with ".tera", the file is processed
-/// using Tera with the provided context; for other files, the file is
-/// copied verbatim to the destination.
-///
-/// # Arguments
-/// * `templates_dir` - The base directory containing the scaffold’s files.
-/// * `output_base` - The directory where rendered/copied files will be written.
-/// * `scaffold` - The scaffold configuration.
-/// * `context_data` - The Tera context used for rendering templates.
-fn render_templates(templates_dir: &Path, output_base: &Path, scaffold: &Scaffold, context_data: &Context) -> Result<(), Box<dyn Error>> {
+/// Render the templates (or copy files) for a given scaffold, skipping files
+/// that already exist when overwrite is false.
+/// Added parameter: `overwrite: bool`.
+fn render_templates(
+    templates_dir: &Path,
+    output_base: &Path,
+    scaffold: &Scaffold,
+    context_data: &Context,
+    overwrite: bool,
+) -> Result<(), Box<dyn Error>> {
     // Create a Tera instance for templating.
     let mut tera = Tera::default();
 
     // Add template files (those ending in ".tera") to the Tera instance.
     for file in &scaffold.template.files {
         if file.src.ends_with(".tera") {
-            // Determine the key (template name) by stripping "templates/" if present.
             let key = if file.src.starts_with("templates/") {
                 &file.src["templates/".len()..]
             } else {
                 &file.src
             };
-
             let file_path = templates_dir.join(&file.src);
             tera.add_template_file(file_path, Some(key))?;
         }
@@ -245,9 +269,18 @@ fn render_templates(templates_dir: &Path, output_base: &Path, scaffold: &Scaffol
 
     // Process each file defined in the scaffold.
     for file in &scaffold.template.files {
-        // Replace placeholders in the destination path using Tera context.
         let dest_path_str = Tera::one_off(&file.dest, context_data, false)?;
         let dest_path = output_base.join(dest_path_str);
+
+        // If file exists and overwriting is disabled, skip.
+        if dest_path.exists() && !overwrite {
+            println!("Skipping existing file: {:?} because overwrite=false", dest_path);
+            continue;
+        } else if dest_path.exists() {
+            println!("Overwriting existing file: {:?} because overwrite=true", dest_path);
+        } else {
+            println!("Creating file: {:?}", dest_path);
+        }
 
         // Ensure the destination directory exists.
         if let Some(parent) = dest_path.parent() {
@@ -255,7 +288,6 @@ fn render_templates(templates_dir: &Path, output_base: &Path, scaffold: &Scaffol
         }
 
         if file.src.ends_with(".tera") {
-            // For template files, render them using Tera.
             let key = if file.src.starts_with("templates/") {
                 &file.src["templates/".len()..]
             } else {
@@ -264,7 +296,6 @@ fn render_templates(templates_dir: &Path, output_base: &Path, scaffold: &Scaffol
             let rendered = tera.render(key, context_data)?;
             fs::write(dest_path, rendered)?;
         } else {
-            // For non-template files, copy them verbatim.
             let source_path = templates_dir.join(&file.src);
             fs::copy(source_path, dest_path)?;
         }
@@ -277,20 +308,20 @@ fn render_templates(templates_dir: &Path, output_base: &Path, scaffold: &Scaffol
 // ========== SCAFFOLD PROCESSING =================
 // ================================================
 
-/// Process a single scaffold: obtain its repository, render its templates,
-/// and run any pre- or post-generation hooks.
-///
-/// Returns an Option<PathBuf> containing the persistent temporary directory
-/// used for a remote clone, if applicable.
-fn process_scaffold(scaffold: &Scaffold, project_name: &str, output_base: &Path) -> Result<Option<PathBuf>, Box<dyn Error>> {
+/// Process a single scaffold. Added parameter `overwrite: bool` to pass
+/// the overwrite flag to render_templates.
+fn process_scaffold(
+    scaffold: &Scaffold,
+    project_name: &str,
+    output_base: &Path,
+    overwrite: bool,
+) -> Result<Option<PathBuf>, Box<dyn Error>> {
     // --- Obtain the Scaffold Repository ---
     let scaffold_repo_base: PathBuf = if is_local_repo(&scaffold.repo) {
-        // For a local repository, canonicalize the path.
         let path = fs::canonicalize(&scaffold.repo)?;
         println!("Using local scaffold repository at: {:?}", path);
         path
     } else {
-        // For a remote repository, clone it into a temporary directory and persist it.
         let temp_dir = TempDir::new()?;
         let scaffold_dir = temp_dir.path().join(scaffold.name.as_deref().unwrap_or("unnamed"));
         if scaffold_dir.exists() {
@@ -298,31 +329,26 @@ fn process_scaffold(scaffold: &Scaffold, project_name: &str, output_base: &Path)
         }
         println!("Cloning repo {:?}", scaffold.repo);
         let _repo = obtain_template_repo(&scaffold.repo, &scaffold_dir)?;
-        // Persist the temporary directory so that the clone isn't deleted.
         let persistent_temp_dir = temp_dir.into_path();
-        // The actual clone path is inside the persistent_temp_dir.
         persistent_temp_dir.join(scaffold.name.as_deref().unwrap_or("unnamed"))
     };
 
     // --- Determine the Templates Directory ---
-    // Use the provided template_dir or default to "templates".
     let templates_dir = scaffold_repo_base.join(scaffold.template_dir.as_deref().unwrap_or("templates"));
     println!("Rendering templates from: {:?}", templates_dir);
 
     // --- Set Up the Templating Context ---
     let mut context = Context::new();
     context.insert("project_name", project_name);
-
-    // Merge additional variables from scaffolding.toml (if any)
     if let Some(vars) = &scaffold.variables {
         for (key, value) in vars {
-            println!("Setting variable: {} = {:?}", key, value);
+            // println!("Setting variable: {} = {:?}", key, value);
             context.insert(key, value);
         }
     }
 
-    // --- Render Templates / Copy Files ---
-    render_templates(&templates_dir, output_base, scaffold, &context)?;
+    // --- Render Templates / Copy Files (with overwrite flag) ---
+    render_templates(&templates_dir, output_base, scaffold, &context, overwrite)?;
 
     // --- Run Pre-Generation Hook (if any) ---
     if let Some(hooks) = &scaffold.hooks {
@@ -342,11 +368,9 @@ fn process_scaffold(scaffold: &Scaffold, project_name: &str, output_base: &Path)
         }
     }
 
-    // If the repository was remote, return the persistent temporary directory so it can be cleaned up.
     if is_local_repo(&scaffold.repo) {
         Ok(None)
     } else {
-        // The persistent directory is the same as scaffold_repo_base in the remote branch.
         Ok(Some(scaffold_repo_base))
     }
 }
@@ -436,7 +460,7 @@ environment = "development"
         context.insert("project_name", "TestProject");
 
         // Render the template.
-        render_templates(templates_dir.path(), output_dir.path(), &scaffold, &context)?;
+        render_templates(templates_dir.path(), output_dir.path(), &scaffold, &context, true)?;
 
         // Verify the rendered output.
         let output_file_path = output_dir.path().join("greeting.txt");
@@ -479,7 +503,7 @@ environment = "development"
         let output_dir = TempDir::new()?;
 
         // Process the scaffold.
-        let result = process_scaffold(&scaffold, "LocalProject", output_dir.path())?;
+        let result = process_scaffold(&scaffold, "LocalProject", output_dir.path(), true)?;
         // For local repositories, process_scaffold should return Ok(None).
         assert!(result.is_none());
 
@@ -581,7 +605,7 @@ environment = "development"
 
         // Create a temporary output directory.
         let output_dir = TempDir::new()?;
-        process_scaffold(&scaffold, "MyProject", output_dir.path())?;
+        process_scaffold(&scaffold, "MyProject", output_dir.path(), true)?;
 
         // Verify that the destination filename has expanded variables.
         let expected_output_file = output_dir.path().join("MyProject-development-kind_config3.yaml");
@@ -604,6 +628,7 @@ environment = "development"
             project_name: "ArgProject".into(),
             output: "arg_output".into(),
             config: "dummy".into(),
+            overwrite: false,
         };
         let mut config = Config {
             project: None,
@@ -619,6 +644,7 @@ environment = "development"
             project: Some(ProjectConfig {
                 name: Some("OldProject".into()),
                 output: Some("old_output".into()),
+                overwrite: Some(false),
             }),
             scaffolds: vec![],
         };
@@ -627,6 +653,7 @@ environment = "development"
             project_name: "NewProject".into(),
             output: "new_output".into(),
             config: "dummy".into(),
+            overwrite: false,
         };
         overwrite_project_settings_with_args(&args, &mut config);
         let proj = config.project.unwrap();
@@ -642,11 +669,13 @@ environment = "development"
             project_name: "CLIProject".into(),
             output: "CLOutput".into(),
             config: "dummy".into(),
+            overwrite: false,
         };
         let config = Config {
             project: Some(ProjectConfig {
                 name: Some("ConfigProject".into()),
                 output: Some("ConfigOutput".into()),
+                overwrite: Some(false),
             }),
             scaffolds: vec![],
         };
@@ -680,6 +709,53 @@ environment = "development"
         // Verify directories are removed.
         assert!(!temp_path1.exists());
         assert!(!temp_path2.exists());
+        Ok(())
+    }
+
+    #[test]
+    fn test_overwrite_flag() -> Result<(), Box<dyn std::error::Error>> {
+        // Set up temporary directories.
+        let templates_dir = TempDir::new()?;
+        let output_dir = TempDir::new()?;
+
+        // Write a simple template file.
+        let template_file_path = templates_dir.path().join("template.tera");
+        fs::write(&template_file_path, "Original content: {{ value }}")?;
+
+        // Build a scaffold using the template.
+        let scaffold = Scaffold {
+            name: Some("OverwriteTest".into()),
+            repo: "dummy".into(), // not used in render_templates
+            template_dir: Some("".into()),
+            template: TemplateConfig {
+                files: vec![TemplateFile {
+                    src: "template.tera".into(),
+                    dest: "test.txt".into(),
+                }],
+            },
+            hooks: None,
+            variables: None,
+        };
+
+        // Prepare a Tera context.
+        let mut context = Context::new();
+        context.insert("value", "new");
+
+        let output_file_path = output_dir.path().join("test.txt");
+
+        // Pre-create the output file with content "old".
+        fs::write(&output_file_path, "old")?;
+
+        // Render templates with overwrite = false; file should remain unchanged.
+        render_templates(templates_dir.path(), output_dir.path(), &scaffold, &context, false)?;
+        let content = fs::read_to_string(&output_file_path)?;
+        assert_eq!(content, "old");
+
+        // Render templates with overwrite = true; file should be overwritten.
+        render_templates(templates_dir.path(), output_dir.path(), &scaffold, &context, true)?;
+        let content = fs::read_to_string(&output_file_path)?;
+        assert_eq!(content, "Original content: new");
+
         Ok(())
     }
 }
