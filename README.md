@@ -63,8 +63,9 @@ scaficionado -o output_scaffolding -p MyTestProjectName
 ## Configuration Details
 
 ```toml
-[[scaffolds]] # Array:
+ # Array of scaffolds
 # Each [[scaffolds]] entry defines a separate scaffold. The generator processes each scaffold in order.
+[[scaffolds]]
 
 # A friendly name for the scaffold (used for logging), which has no bearing on the configuration
 name = 
@@ -72,7 +73,8 @@ name =
 # The repository from which to pull the scaffold files. This can be either a local path (e.g. ../example-1) or a remote Git URL.
 repo =
 
-# The directory within the repository that contains your templates. Defaults to "templates" if not provided. For repositories where the files reside at the root, set this to ".".
+# The directory within the repository that contains your templates. Defaults to "templates" if not provided.
+# For repositories where the files reside at the root, set this to ".".
 # (optional): defaults to "templates" if not provided.
 template_dir = "."
 
@@ -81,7 +83,7 @@ template_dir = "."
 files = [
     {src = "src1.ext.tera", dest = "dest1/src1.ext"},
     {src = "src2.ext", dest = "dest2/src2.ext"},
-    {src = "src3.ext", dest = "{{project_name}}/dest3/src3.ext"},
+    {src = "src3.ext", dest = "{{project_name}}-{{some_count}}/dest3/src3.ext"},
 ]
 
 # Optionally specify hook scripts to run before (pre) and after (post) template rendering. These paths are relative to the repository root.
@@ -99,7 +101,10 @@ some_environment = "development"
 
 ## Expanded variables
 
+Expanded variables apply to the dest section of the scaffold, as well as the expanded tera templated file.
+
 - project_name: if used in scaffolding.toml, this path will get expanded (e.g. scaficionado -n TestProjectOne)
+- key/values defined under scaffolds.variables (e.g. {{some_count}}) would expand to 2 in the above example
 
 ## Example configuration
 

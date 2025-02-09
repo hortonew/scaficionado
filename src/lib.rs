@@ -148,11 +148,8 @@ fn render_templates(templates_dir: &Path, output_base: &Path, scaffold: &Scaffol
 
     // Process each file defined in the scaffold.
     for file in &scaffold.template.files {
-        // Replace placeholder(s) in the destination path.
-        let dest_path_str = file.dest.replace(
-            "{{project_name}}",
-            context_data.get("project_name").and_then(|v| v.as_str()).unwrap_or("default"),
-        );
+        // Replace placeholders in the destination path using Tera context.
+        let dest_path_str = Tera::one_off(&file.dest, context_data, false)?;
         let dest_path = output_base.join(dest_path_str);
 
         // Ensure the destination directory exists.

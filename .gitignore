@@ -3,3 +3,4 @@ generated*
 .vscode
 scaffolding.toml
 .DS_Store
+.infracost
