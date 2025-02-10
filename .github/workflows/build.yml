@@ -18,8 +18,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
-      - name: Cargo Build
+      - name: Cargo Check
         run: |
           cargo check --locked
+
+      - name: Cargo Test
+        run: |
           cargo test --locked
+
+      - name: Cargo Build
+        run: |
           cargo build --release
