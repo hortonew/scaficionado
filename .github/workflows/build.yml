@@ -1,9 +1,7 @@
-name: Release to Crates.io
+name: Build
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
+  workflow_dispatch:
 
 jobs:
   release:
@@ -25,8 +23,3 @@ jobs:
           cargo check --locked
           cargo test --locked
           cargo build --release
-
-      - name: Publish to crates.io
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish
