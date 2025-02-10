@@ -31,6 +31,7 @@ A scaffolding tool to create repeatable project structure using files and script
 ## Prerequisites
 
 - A scaffolding.toml file (can be renamed if using -c argument).  See Configuration Details below.
+- Cargo (`curl https://sh.rustup.rs -sSf | sh`)
 
 ## Install
 
@@ -119,6 +120,35 @@ some_count = 2
 some_environment = "development"
 ```
 
+## Advanced configuration
+
+You can render an entire directory (recursively) if you want.  For example:
+
+```toml
+[project]
+name = "TemplateRepoDirectory"
+output = "."
+
+[[scaffolds]]
+name = "Local Repo"
+repo = "/some/local/repo"
+template_dir = "."
+
+[scaffolds.template]
+files = [
+    { src = "templates", dest = "templates" },
+]
+
+[scaffolds.variables]
+kind_workers = 3
+environment = "development"
+```
+
+It will put the "templates" directory in your current working directory, and any file with a .tera extension will:
+
+1. get templated
+2. have the .tera extension removed
+
 ## Expanded variables
 
 Expanded variables apply to the dest section of the scaffold, as well as the expanded tera templated file.
@@ -141,3 +171,15 @@ cargo install --path .
 ## Release
 
 To release a new version to Crates.io, tag a new version as vX.Y.Z, matching the version in Cargo.toml.
+
+## Some ways to use this
+
+Store scaffolding files in:
+
+~/scaffolding/rust-github.toml
+
+- so you can `ska -c ~/scaffolding/rust-github -o .` to generate a useful CI/CD workflow and Makefile.
+
+~/scaffolding/eks-cheap.toml
+
+- so you can `ska -c ~/scaffolding/eks-cheap.toml -o .` to generate a quick EKS config for a new lab environment.

@@ -241,9 +241,57 @@ fn load_config(config_path: &Path) -> Result<Config, Box<dyn Error>> {
 // ========== TEMPLATE RENDERING ==================
 // ================================================
 
-/// Render the templates (or copy files) for a given scaffold, skipping files
-/// that already exist when overwrite is false.
-/// Added parameter: `overwrite: bool`.
+fn write_file(dest: &Path, content: &[u8], overwrite: bool) -> Result<(), Box<dyn Error>> {
+    if dest.exists() && !overwrite {
+        println!("Skipping existing file: {:?}", dest);
+        return Ok(());
+    }
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(dest, content)?;
+    Ok(())
+}
+
+fn copy_file(src: &Path, dest: &Path, overwrite: bool) -> Result<(), Box<dyn Error>> {
+    if dest.exists() && !overwrite {
+        println!("Skipping existing file: {:?}", dest);
+        return Ok(());
+    }
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::copy(src, dest)?;
+    Ok(())
+}
+
+// ===== Updated process_directory =====
+fn process_directory(src_dir: &Path, dest_dir: &Path, context: &Context, overwrite: bool) -> Result<(), Box<dyn Error>> {
+    for entry in fs::read_dir(src_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        let relative = path.strip_prefix(src_dir)?;
+        let dest_path = dest_dir.join(relative);
+        if path.is_dir() {
+            fs::create_dir_all(&dest_path)?;
+            process_directory(&path, &dest_path, context, overwrite)?;
+        } else {
+            if let Some(ext) = path.extension() {
+                if ext == "tera" {
+                    let content = fs::read_to_string(&path)?;
+                    let rendered = Tera::one_off(&content, context, false)?;
+                    let dest_file = dest_path.with_extension(""); // remove .tera extension
+                    write_file(&dest_file, rendered.as_bytes(), overwrite)?;
+                    continue;
+                }
+            }
+            copy_file(&path, &dest_path, overwrite)?;
+        }
+    }
+    Ok(())
+}
+
+// ===== Updated render_templates =====
 fn render_templates(
     templates_dir: &Path,
     output_base: &Path,
@@ -251,40 +299,40 @@ fn render_templates(
     context_data: &Context,
     overwrite: bool,
 ) -> Result<(), Box<dyn Error>> {
-    // Create a Tera instance for templating.
     let mut tera = Tera::default();
 
-    // Add template files (those ending in ".tera") to the Tera instance.
+    // Register individual template files ending in ".tera".
     for file in &scaffold.template.files {
-        if file.src.ends_with(".tera") {
+        let src_path = templates_dir.join(&file.src);
+        if src_path.is_file() && file.src.ends_with(".tera") {
             let key = if file.src.starts_with("templates/") {
                 &file.src["templates/".len()..]
             } else {
                 &file.src
             };
-            let file_path = templates_dir.join(&file.src);
-            tera.add_template_file(file_path, Some(key))?;
+            tera.add_template_file(src_path.clone(), Some(key))?;
         }
     }
 
-    // Process each file defined in the scaffold.
     for file in &scaffold.template.files {
         let dest_path_str = Tera::one_off(&file.dest, context_data, false)?;
         let dest_path = output_base.join(dest_path_str);
+        let src_path = templates_dir.join(&file.src);
 
-        // If file exists and overwriting is disabled, skip.
+        if src_path.is_dir() {
+            println!("Processing directory: {:?}", src_path);
+            fs::create_dir_all(&dest_path)?;
+            process_directory(&src_path, &dest_path, context_data, overwrite)?;
+            continue;
+        }
+
         if dest_path.exists() && !overwrite {
             println!("Skipping existing file: {:?} because overwrite=false", dest_path);
             continue;
         } else if dest_path.exists() {
-            println!("Overwriting existing file: {:?} because overwrite=true", dest_path);
+            println!("Overwriting existing file: {:?}", dest_path);
         } else {
             println!("Creating file: {:?}", dest_path);
-        }
-
-        // Ensure the destination directory exists.
-        if let Some(parent) = dest_path.parent() {
-            fs::create_dir_all(parent)?;
         }
 
         if file.src.ends_with(".tera") {
@@ -294,13 +342,11 @@ fn render_templates(
                 &file.src
             };
             let rendered = tera.render(key, context_data)?;
-            fs::write(dest_path, rendered)?;
+            write_file(&dest_path, rendered.as_bytes(), overwrite)?;
         } else {
-            let source_path = templates_dir.join(&file.src);
-            fs::copy(source_path, dest_path)?;
+            copy_file(&src_path, &dest_path, overwrite)?;
         }
     }
-
     Ok(())
 }
 
@@ -755,6 +801,81 @@ environment = "development"
         render_templates(templates_dir.path(), output_dir.path(), &scaffold, &context, true)?;
         let content = fs::read_to_string(&output_file_path)?;
         assert_eq!(content, "Original content: new");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_render_full_directory_templating_and_skipping() -> Result<(), Box<dyn std::error::Error>> {
+        // Create temporary directories for full directory test.
+        let templates_dir = TempDir::new()?;
+        let output_dir = TempDir::new()?;
+
+        // Create a full directory structure in templates_dir.
+        let full_dir = templates_dir.path().join("full_dir");
+        fs::create_dir_all(&full_dir)?;
+
+        // Create file1.txt.tera in full_dir.
+        let file1_path = full_dir.join("file1.txt.tera");
+        fs::write(&file1_path, "Hello, {{ project_name }}!")?;
+
+        // Create file2.txt (non-templated) in full_dir.
+        let file2_path = full_dir.join("file2.txt");
+        fs::write(&file2_path, "Static content")?;
+
+        // Create nested directory and file3.txt.tera.
+        let nested_dir = full_dir.join("sub_dir");
+        fs::create_dir_all(&nested_dir)?;
+        let file3_path = nested_dir.join("file3.txt.tera");
+        fs::write(&file3_path, "Nested {{ project_name }}!")?;
+
+        // Build a scaffold that processes the entire "full_dir" directory.
+        let scaffold = Scaffold {
+            name: Some("FullDirTest".to_string()),
+            repo: "dummy".to_string(),          // not used in render_templates.
+            template_dir: Some("".to_string()), // Use the root of templates_dir.
+            template: TemplateConfig {
+                files: vec![TemplateFile {
+                    src: "full_dir".into(),
+                    dest: "rendered_dir".into(),
+                }],
+            },
+            hooks: None,
+            variables: None,
+        };
+
+        // Create a Tera context.
+        let mut context = Context::new();
+        context.insert("project_name", "TestProject");
+
+        // First rendering with overwrite true.
+        render_templates(templates_dir.path(), output_dir.path(), &scaffold, &context, true)?;
+
+        // Verify file1.txt is rendered and its .tera extension is removed.
+        let rendered_file1 = output_dir.path().join("rendered_dir").join("file1.txt");
+        assert!(rendered_file1.exists());
+        let content1 = fs::read_to_string(&rendered_file1)?;
+        assert_eq!(content1, "Hello, TestProject!");
+
+        // Verify file2.txt is copied as-is.
+        let rendered_file2 = output_dir.path().join("rendered_dir").join("file2.txt");
+        assert!(rendered_file2.exists());
+        let content2 = fs::read_to_string(&rendered_file2)?;
+        assert_eq!(content2, "Static content");
+
+        // Verify the nested templated file is processed and renamed.
+        let rendered_file3 = output_dir.path().join("rendered_dir").join("sub_dir").join("file3.txt");
+        assert!(rendered_file3.exists());
+        let content3 = fs::read_to_string(&rendered_file3)?;
+        assert_eq!(content3, "Nested TestProject!");
+
+        // Now, simulate an existing file scenario.
+        fs::write(&rendered_file1, "Old Content")?;
+        // Run templating again with overwrite = false.
+        render_templates(templates_dir.path(), output_dir.path(), &scaffold, &context, false)?;
+        let content1_after = fs::read_to_string(&rendered_file1)?;
+        // The pre-existing file should remain unchanged.
+        assert_eq!(content1_after, "Old Content");
 
         Ok(())
     }
