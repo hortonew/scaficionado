@@ -64,6 +64,15 @@ scaficionado -p MyTestProjectName -o . -w
 
 ![Scaficionado](/images/scaficionado.gif)
 
+## Pro Tip
+
+It's hard to spell, so use an alias!
+
+```sh
+echo "ska='scaficionado'" >> ~/.zshrc
+```
+
+
 ## Configuration Details
 
 ```toml
