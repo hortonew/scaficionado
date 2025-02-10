@@ -70,57 +70,50 @@ It's hard to spell, so use an alias!
 
 ```sh
 echo "ska='scaficionado'" >> ~/.zshrc
+source ~/.zshrc
+ska --version
 ```
 
 
 ## Configuration Details
 
 ```toml
-# (optional) project section, defining name, output location, overwrite which can alternatively be specified as command-line arguments.
+# Project section (optional)
 [project]
-
-# (optional) project name.  Overwrites the default project_name.  Overwritten by the project-name command-line argument.
+# Project name (overwrites default). Overwritten by --project-name argument.
 name = "MyExampleProject"
-
-# Overwrites the default output directory.  Overwritten by the output command-line argument.
-# Warning: will overwrite files in your current working directory if you use "."
-# e.g. "output" or "." for current directory
+# Output directory (overwrites default). Overwritten by --output argument.
+# Warning: using "." will overwrite files in the current directory.
 output = "generated"
-
-# (optional) Controls whether or not existing files are overwritten.  Defaults to false.
+# Controls whether existing files are overwritten (default: false).
 overwrite = false
 
-# Array of scaffolds
-# Each [[scaffolds]] entry defines a separate scaffold. The generator processes each scaffold in order.
+# Scaffolds array
 [[scaffolds]]
-
-# A friendly name for the scaffold (used for logging), which has no bearing on the configuration
-name = 
-
-# The repository from which to pull the scaffold files. This can be either a local path (e.g. ../example-1) or a remote Git URL.
-repo =
-
-# The directory within the repository that contains your templates. Defaults to "templates" if not provided.
-# For repositories where the files reside at the root, set this to ".".
-# (optional): defaults to "templates" if not provided.
+# Friendly name for the scaffold (used for logging).
+name = "Example Scaffold"
+# Repository for scaffold files (local path or remote Git URL).
+repo = "../example-1"
+# Directory within the repository containing templates (default: "templates").
 template_dir = "."
 
-# Under the template table, list the files to process. Each file entry has a src and dest, and dest paths can use the {{project_name}} variable.
+# Template files to process
 [scaffolds.template]
+# List of files that map source repository files to templated destination files in the output location.
+# Destination names can use variables defined below (e.g. {{some_environment}}-{{some_count}}).
+# {{project_name}} is a reserved variable that comes from project.name (see above).
 files = [
     {src = "src1.ext.tera", dest = "dest1/src1.ext"},
     {src = "src2.ext", dest = "dest2/src2.ext"},
-    {src = "src3.ext", dest = "{{project_name}}-{{some_count}}/dest3/src3.ext"},
+    {src = "src3.ext", dest = "{{project_name}}-{{some_environment}}-{{some_count}}/dest3/src3.ext"},
 ]
 
-# Optionally specify hook scripts to run before (pre) and after (post) template rendering. These paths are relative to the repository root.
+# Hook scripts (optional)
 [scaffolds.hooks]
-# optional pre hook found in the remote repository
-pre = "hooks/pre.sh"
-# optional post hook found in the remote repository
-post = "hooks/post.sh"
+pre = "hooks/pre.sh"  # Pre-render hook script
+post = "hooks/post.sh"  # Post-render hook script
 
-# Optionally specify key/values to get injected into the context
+# Variables to inject into the context (optional)
 [scaffolds.variables]
 some_count = 2
 some_environment = "development"
