@@ -63,6 +63,8 @@ scaficionado -p MyTestProjectName -o output_scaffolding
 scaficionado -p MyTestProjectName -o . -w
 ```
 
+## Demo
+
 ![Scaficionado](/images/scaficionado.gif)
 
 ## Pro Tip
@@ -183,3 +185,8 @@ Store scaffolding files in:
 ~/scaffolding/eks-cheap.toml
 
 - so you can `ska -c ~/scaffolding/eks-cheap.toml -o .` to generate a quick EKS config for a new lab environment.
+
+
+## Inspiration
+
+- [Cookiecutter](https://cookiecutter.readthedocs.io/)
